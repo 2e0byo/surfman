@@ -18,10 +18,9 @@ use self::common::FilesystemResourceLoader;
 use surfman::{ContextAttributeFlags, ContextAttributes, GLVersion};
 #[cfg(not(target_os = "android"))]
 use winit::{
-    dpi::{LogicalSize, PhysicalSize},
-    event::{DeviceEvent, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder
+    window::WindowBuilder,
 };
 
 pub mod common;
@@ -88,19 +87,15 @@ static BACKGROUND_COLOR: [f32; 4] = [
 #[cfg(not(target_os = "android"))]
 fn main() {
     let event_loop = EventLoop::new();
-    let dpi = event_loop.primary_monitor().unwrap().scale_factor();
     let window_size = Size2D::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-    let logical_size =
-        PhysicalSize::new(window_size.width, window_size.height)
-        .to_logical::<f64>(dpi);
-
     let window = WindowBuilder::new()
         .with_title("Multithreaded example")
-        .with_inner_size(logical_size)
+        .with_inner_size(winit::dpi::LogicalSize::new(
+            window_size.width,
+            window_size.height,
+        ))
         .build(&event_loop)
         .unwrap();
-
-    window.set_visible(true);
 
     let connection = Connection::from_winit_window(&window).unwrap();
     let native_widget = connection
@@ -110,7 +105,7 @@ fn main() {
     let mut device = connection.create_device(&adapter).unwrap();
 
     let context_attributes = ContextAttributes {
-        version: GLVersion::new(3, 0),
+        version: GLVersion::new(3, 3),
         flags: ContextAttributeFlags::ALPHA,
     };
     let context_descriptor = device
@@ -136,22 +131,20 @@ fn main() {
         window_size,
     );
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        }
-        | Event::DeviceEvent {
-            event:
-                DeviceEvent::Key(KeyboardInput {
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                }),
-            ..
-        } => *control_flow = ControlFlow::Exit,
-        _ => { app.tick(true); *control_flow = ControlFlow::Poll; }
-    });
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
 
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            Event::RedrawRequested(_) => {
+                app.tick(true);
+            }
+            _ => (),
+        }
+    });
 }
 pub struct App {
     main_from_worker_receiver: Receiver<Frame>,
